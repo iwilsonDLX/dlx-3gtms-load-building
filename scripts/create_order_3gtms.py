@@ -270,6 +270,16 @@ def create_order(playwright: Playwright, load_data: dict, config: dict) -> None:
         popup.wait_for(state="visible", timeout=15_000)
         take_screenshot(page, 8, "rate_popup_visible")
 
+        # Wait for the loading spinner to disappear before reading any rows.
+        # Rates can take time to return from carriers — use a 30 s timeout.
+        print("    [rates] Waiting for rates to finish loading...")
+        popup.locator(".loading, .jqx-loader, [class*='loading'], :text('Loading...')").wait_for(
+            state="hidden", timeout=30_000
+        )
+        # Additional buffer for row DOM to fully render after spinner clears
+        page.wait_for_timeout(2_000)
+        take_screenshot(page, 8, "rates_loaded")
+
         # Collect all selectable carrier rows — rows that contain a jqx checkbox
         rate_rows = popup.locator("[role='row']").filter(
             has=popup.locator(".jqx-checkbox-default")
