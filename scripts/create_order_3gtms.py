@@ -132,36 +132,18 @@ def autocomplete_select(frame, field_id: str, search_text: str, match_hint: str 
     best_link.click()
 
 
-def select_date_by_calendar(frame, calendar_index: int, date_str: str) -> None:
+def fill_date(frame, field_index: int, date_str: str) -> None:
     """
-    Open the Nth calendar widget (0-indexed) and click the target day.
+    Type a date directly into the Nth jqx-datetimeinput field (0-indexed).
 
-    The calendar icon (.jqx-icon-calendar) is hidden in the DOM until the date
-    input is focused. This function clicks the text input inside the Nth
-    .jqx-datetimeinput container to reveal the icon, waits for it to become
-    visible, then clicks it to open the calendar.
+    Fields in order: 0=earliest_ship, 1=latest_ship, 2=earliest_delivery, 3=latest_delivery
 
     Args:
-        frame: FrameLocator for the form iframe
-        calendar_index: 0=earliest_ship, 1=latest_ship, 2=earliest_delivery, 3=latest_delivery
-        date_str: Date in MM/DD/YYYY format
-
-    NOTE: Assumes the calendar is already showing the correct month.
-    Cross-month navigation would require additional logic.
+        frame:       FrameLocator for the form iframe.
+        field_index: 0-based index of the date field.
+        date_str:    Date in MM/DD/YYYY format.
     """
-    day = str(int(date_str.split("/")[1]))  # strip leading zero (e.g. "04" → "4")
-
-    # Click the text input inside the date widget to give it focus —
-    # this makes the calendar icon visible.
-    date_widget = frame.locator(".jqx-datetimeinput").nth(calendar_index)
-    date_widget.locator("input").click()
-
-    # Wait for the calendar icon to appear, then click it to open the picker.
-    icon = date_widget.locator(".jqx-icon-calendar")
-    icon.wait_for(state="visible", timeout=5_000)
-    icon.click()
-
-    frame.get_by_role("gridcell", name=day).click()
+    frame.locator(".jqx-datetimeinput").nth(field_index).locator("input").fill(date_str)
 
 
 def load_config(config_path: str) -> dict:
@@ -214,10 +196,10 @@ def create_order(playwright: Playwright, load_data: dict, config: dict) -> None:
 
         # ── Step 4: Ship and delivery dates ────────────────────────────────
         print("[4/8] Setting dates...")
-        select_date_by_calendar(frame, 0, load_data["earliest_ship"])
-        select_date_by_calendar(frame, 1, load_data["latest_ship"])
-        select_date_by_calendar(frame, 2, load_data["earliest_delivery"])
-        select_date_by_calendar(frame, 3, load_data["latest_delivery"])
+        fill_date(frame, 0, load_data["earliest_ship"])
+        fill_date(frame, 1, load_data["latest_ship"])
+        fill_date(frame, 2, load_data["earliest_delivery"])
+        fill_date(frame, 3, load_data["latest_delivery"])
         take_screenshot(page, 4, "dates_set")
 
         # ── Step 5: Order line ──────────────────────────────────────────────
