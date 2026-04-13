@@ -78,6 +78,9 @@ def autocomplete_select(frame, field_id: str, search_text: str, match_hint: str 
     Fill an autocomplete field, trigger the search, then click the dropdown result
     whose visible text best matches match_hint (falls back to search_text if omitted).
 
+    Scopes the candidate links to the jQWidgets popup that appears directly below
+    the input, avoiding page-level nav links and other unrelated anchors.
+
     Scoring: tokenises match_hint on whitespace and commas, then counts how many
     tokens appear in each result's text. The highest-scoring result wins. Ties and
     zero-score cases fall back to the first result so the function never deadlocks.
@@ -95,22 +98,29 @@ def autocomplete_select(frame, field_id: str, search_text: str, match_hint: str 
     field.fill(search_text)
     field.press("Enter")
 
-    # Wait for at least one result before collecting them all
-    links = frame.get_by_role("link")
-    links.first.wait_for(timeout=10_000)
-    all_links = links.all()
+    # Wait for the jQWidgets popup that contains the search results to become
+    # visible. Scoping to this container prevents matching nav links and other
+    # page-level anchors (e.g. "Comments & Special Instructions").
+    popup = frame.locator(".jqx-popup").filter(has=frame.locator("a")).first
+    try:
+        popup.wait_for(state="visible", timeout=10_000)
+        result_links = popup.get_by_role("link").all()
+    except PlaywrightTimeoutError:
+        # Fallback: popup class not found — collect all links as before
+        print(f"    [autocomplete] WARNING: popup container not found, falling back to page-wide link search")
+        result_links = frame.get_by_role("link").all()
 
-    if not all_links:
+    if not result_links:
         raise RuntimeError(f"No autocomplete results appeared for '{search_text}'")
 
     # Tokenise the hint (or search text) — lowercase, split on whitespace and commas
     hint = (match_hint or search_text).lower()
     tokens = [t for t in re.split(r"[\s,]+", hint) if t]
 
-    best_link = all_links[0]   # fallback: first result
+    best_link = result_links[0]   # fallback: first result
     best_score = -1
 
-    for link in all_links:
+    for link in result_links:
         text = (link.text_content() or "").lower()
         score = sum(1 for token in tokens if token in text)
         if score > best_score:
@@ -126,6 +136,11 @@ def select_date_by_calendar(frame, calendar_index: int, date_str: str) -> None:
     """
     Open the Nth calendar widget (0-indexed) and click the target day.
 
+    The calendar icon (.jqx-icon-calendar) is hidden in the DOM until the date
+    input is focused. This function clicks the text input inside the Nth
+    .jqx-datetimeinput container to reveal the icon, waits for it to become
+    visible, then clicks it to open the calendar.
+
     Args:
         frame: FrameLocator for the form iframe
         calendar_index: 0=earliest_ship, 1=latest_ship, 2=earliest_delivery, 3=latest_delivery
@@ -134,8 +149,18 @@ def select_date_by_calendar(frame, calendar_index: int, date_str: str) -> None:
     NOTE: Assumes the calendar is already showing the correct month.
     Cross-month navigation would require additional logic.
     """
-    day = str(int(date_str.split("/")[1]))  # strip leading zero (e.g. "04" → "4" → "4")
-    frame.locator(".jqx-icon-calendar").nth(calendar_index).click()
+    day = str(int(date_str.split("/")[1]))  # strip leading zero (e.g. "04" → "4")
+
+    # Click the text input inside the date widget to give it focus —
+    # this makes the calendar icon visible.
+    date_widget = frame.locator(".jqx-datetimeinput").nth(calendar_index)
+    date_widget.locator("input").click()
+
+    # Wait for the calendar icon to appear, then click it to open the picker.
+    icon = date_widget.locator(".jqx-icon-calendar")
+    icon.wait_for(state="visible", timeout=5_000)
+    icon.click()
+
     frame.get_by_role("gridcell", name=day).click()
 
 
