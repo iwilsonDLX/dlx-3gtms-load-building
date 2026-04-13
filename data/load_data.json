@@ -1,6 +1,8 @@
 {
   "shipper_search":    "Demo Location",
+  "origin":            "1000 Industrial Park Holstein IA 51025",
   "receiver_search":   "Lowes",
+  "destination":       "5758 Sunnybrook Dr Sioux City IA 51106",
   "earliest_ship":     "04/13/2026",
   "latest_ship":       "04/13/2026",
   "earliest_delivery": "04/15/2026",

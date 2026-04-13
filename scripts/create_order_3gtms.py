@@ -11,6 +11,7 @@ Usage:
     py scripts/create_order_3gtms.py --config config.json
 """
 
+import re
 import json
 import argparse
 from pathlib import Path
@@ -39,8 +40,10 @@ REF_TYPE_MAP = {
 
 # ─── Default test data ─────────────────────────────────────────────────────────
 DEFAULT_LOAD_DATA = {
-    "shipper_search":    "Demo Location",   # text to type in shipper autocomplete
-    "receiver_search":   "Lowes",           # text to type in receiver autocomplete
+    "shipper_search":    "Demo Location",                    # text to type in shipper autocomplete
+    "origin":            "1000 Industrial Park Holstein IA 51025",  # used to score dropdown results
+    "receiver_search":   "Lowes",                           # text to type in receiver autocomplete
+    "destination":       "5758 Sunnybrook Dr Sioux City IA 51106",  # used to score dropdown results
     "earliest_ship":     "04/13/2026",      # MM/DD/YYYY
     "latest_ship":       "04/13/2026",
     "earliest_delivery": "04/15/2026",
@@ -70,19 +73,53 @@ def take_screenshot(page, step: int, label: str) -> None:
         print(f"    [screenshot failed] {label}: {e}")
 
 
-def autocomplete_select(frame, field_id: str, search_text: str) -> None:
+def autocomplete_select(frame, field_id: str, search_text: str, match_hint: str = None) -> None:
     """
-    Fill an autocomplete field, trigger the search, and click the first result.
-    Waits for the dropdown link to appear before clicking.
+    Fill an autocomplete field, trigger the search, then click the dropdown result
+    whose visible text best matches match_hint (falls back to search_text if omitted).
+
+    Scoring: tokenises match_hint on whitespace and commas, then counts how many
+    tokens appear in each result's text. The highest-scoring result wins. Ties and
+    zero-score cases fall back to the first result so the function never deadlocks.
+
+    Args:
+        frame:       FrameLocator for the containing iframe.
+        field_id:    CSS selector for the autocomplete input (e.g. "#robustSearchText_sourceId").
+        search_text: Text to type into the field to trigger the search.
+        match_hint:  Full address or any additional text used to score results
+                     (e.g. "1000 Industrial Park Holstein IA 51025"). Optional —
+                     when omitted, search_text is used for scoring instead.
     """
     field = frame.locator(field_id)
     field.click()
     field.fill(search_text)
     field.press("Enter")
-    # Wait for at least one link to appear in the dropdown
-    first_result = frame.get_by_role("link").first
-    first_result.wait_for(timeout=10_000)
-    first_result.click()
+
+    # Wait for at least one result before collecting them all
+    links = frame.get_by_role("link")
+    links.first.wait_for(timeout=10_000)
+    all_links = links.all()
+
+    if not all_links:
+        raise RuntimeError(f"No autocomplete results appeared for '{search_text}'")
+
+    # Tokenise the hint (or search text) — lowercase, split on whitespace and commas
+    hint = (match_hint or search_text).lower()
+    tokens = [t for t in re.split(r"[\s,]+", hint) if t]
+
+    best_link = all_links[0]   # fallback: first result
+    best_score = -1
+
+    for link in all_links:
+        text = (link.text_content() or "").lower()
+        score = sum(1 for token in tokens if token in text)
+        if score > best_score:
+            best_score = score
+            best_link = link
+
+    chosen_text = (best_link.text_content() or "").strip()
+    print(f"    [autocomplete] score={best_score}  selected='{chosen_text}'")
+    best_link.click()
 
 
 def select_date_by_calendar(frame, calendar_index: int, date_str: str) -> None:
@@ -146,8 +183,8 @@ def create_order(playwright: Playwright, load_data: dict, config: dict) -> None:
 
         # ── Step 3: Shipper and Receiver (autocomplete fields) ──────────────
         print("[3/8] Setting shipper and receiver...")
-        autocomplete_select(frame, "#robustSearchText_sourceId",      load_data["shipper_search"])
-        autocomplete_select(frame, "#robustSearchText_destinationId",  load_data["receiver_search"])
+        autocomplete_select(frame, "#robustSearchText_sourceId",     load_data["shipper_search"],  load_data.get("origin"))
+        autocomplete_select(frame, "#robustSearchText_destinationId", load_data["receiver_search"], load_data.get("destination"))
         take_screenshot(page, 3, "shipper_receiver_set")
 
         # ── Step 4: Ship and delivery dates ────────────────────────────────
