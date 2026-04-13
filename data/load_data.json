@@ -1,0 +1,17 @@
+{
+  "shipper_search":    "Demo Location",
+  "receiver_search":   "Lowes",
+  "earliest_ship":     "04/13/2026",
+  "latest_ship":       "04/13/2026",
+  "earliest_delivery": "04/15/2026",
+  "latest_delivery":   "04/15/2026",
+  "description":       "Generators",
+  "gross_weight":      "20000",
+  "net_weight":        "20000",
+  "hu_count":          "1",
+  "hu_type":           "Pallet",
+  "piece_count":       "1",
+  "reference_numbers": [
+    {"type": "Customer PO Number", "value": "Customer1234567"}
+  ]
+}
