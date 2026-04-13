@@ -146,6 +146,19 @@ def fill_date(frame, field_index: int, date_str: str) -> None:
     frame.locator(".jqx-datetimeinput").nth(field_index).locator("input").fill(date_str)
 
 
+def _parse_dollar(text: str) -> float:
+    """
+    Parse a dollar amount string into a float.
+    Handles formats like '$1,234.56', '1234.56', '$1,234'.
+    Returns float('inf') if no numeric value can be extracted.
+    """
+    cleaned = re.sub(r'[^\d.]', '', text)
+    try:
+        return float(cleaned)
+    except ValueError:
+        return float("inf")
+
+
 def load_config(config_path: str) -> dict:
     """
     Load 3GTMS URL and credentials from a JSON config file.
@@ -249,12 +262,69 @@ def create_order(playwright: Playwright, load_data: dict, config: dict) -> None:
         page.wait_for_load_state("networkidle")
         take_screenshot(page, 7, "rates_returned")
 
-        # ── Step 8: Select rate and save ────────────────────────────────────
+        # ── Step 8: Handle orderRatingPopup and save ───────────────────────
         print("[8/8] Selecting rate and saving order...")
-        frame.locator(".jqx-checkbox-default").first.click()
-        frame.get_by_role("button", name="Select & Save Order").click()
+
+        # Wait for the rating popup modal to be fully visible
+        popup = frame.locator("#orderRatingPopup")
+        popup.wait_for(state="visible", timeout=15_000)
+        take_screenshot(page, 8, "rate_popup_visible")
+
+        # Collect all selectable carrier rows — rows that contain a jqx checkbox
+        rate_rows = popup.locator("[role='row']").filter(
+            has=popup.locator(".jqx-checkbox-default")
+        )
+        count = rate_rows.count()
+        if count == 0:
+            raise RuntimeError(
+                "No selectable rate rows found in #orderRatingPopup. "
+                "Check whether the popup uses a different row structure."
+            )
+        print(f"    [rates] {count} carrier(s) returned")
+
+        if count == 1:
+            # Only one rate available — select it automatically
+            rate_rows.first.locator(".jqx-checkbox-default").click()
+            print("    [rates] Single rate — selected automatically")
+        else:
+            # Multiple rates: parse the net charge (red amount) from each row
+            # and select the row with the lowest value
+            best_idx = 0
+            best_amount = float("inf")
+
+            for i in range(count):
+                row = rate_rows.nth(i)
+
+                # Red amounts in 3GTMS use inline color styles
+                red_el = row.locator(
+                    "[style*='color: red'], [style*='color:red'], "
+                    "[style*='color:#ff0000'], [style*='color: #ff0000']"
+                )
+
+                if red_el.count() > 0:
+                    raw = red_el.first.text_content() or ""
+                else:
+                    # Fallback: scan row for all dollar amounts; net charge is
+                    # typically the last (rightmost) figure in the row
+                    all_amounts = re.findall(r'\$[\d,]+\.?\d*', row.text_content() or "")
+                    raw = all_amounts[-1] if all_amounts else ""
+
+                amount = _parse_dollar(raw)
+                print(f"    [rates] row {i}: {raw!r} → {amount:.2f}")
+
+                if amount < best_amount:
+                    best_amount = amount
+                    best_idx = i
+
+            rate_rows.nth(best_idx).locator(".jqx-checkbox-default").click()
+            print(f"    [rates] Selected row {best_idx} (lowest net charge: ${best_amount:,.2f})")
+
+        take_screenshot(page, 9, "rate_selected")
+
+        # Click the confirm/assign button inside the popup to finalize
+        popup.get_by_role("button", name="Select & Save Order").click()
         page.wait_for_load_state("networkidle")
-        take_screenshot(page, 8, "order_saved")
+        take_screenshot(page, 10, "order_saved")
 
         print("\n[DONE] Order created successfully.")
 
