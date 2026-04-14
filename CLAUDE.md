@@ -10,7 +10,8 @@ Source data comes from supplier tender emails parsed by Claude API.
 - **Navigation to Create Order:** Click "Orders" in top ribbon → click "+" icon far left
 
 ## Form Field Notes
-- **Client, Shipper, Receiver** are autocomplete fields — type value, wait for 
+- **Client** is an optional autocomplete field — only fill if provided in the load data
+- **Shipper, Receiver** are autocomplete fields — type value, wait for 
   dropdown, click closest match
 - **Origin Location, Destination Location** are autocomplete fields — same behavior
 - **Delivery date = same as ship date** unless otherwise specified
@@ -32,8 +33,9 @@ Source data comes from supplier tender emails parsed by Claude API.
 ## Email Parsing
 - Origin address is typically in the sender's email signature
 - Delivery date defaults to same day as ship date
-- Required fields: Client, Shipper, Origin, Receiver, Destination, 
+- Required fields: Shipper, Origin, Receiver, Destination, 
   Ship Date, Commodity, NMFC, Freight Class, Weight, Piece Count, Dimensions
+- Optional fields: Client (fill only when present in the source data)
 
 ## GitHub
 - Repository: https://github.com/iwilsonDLX/dlx-playwright-automations
