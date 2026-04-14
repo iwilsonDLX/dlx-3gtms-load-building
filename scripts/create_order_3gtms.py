@@ -280,10 +280,10 @@ def create_order(playwright: Playwright, load_data: dict, config: dict) -> None:
         page.wait_for_timeout(2_000)
         take_screenshot(page, 8, "rates_loaded")
 
-        # Collect all selectable carrier rows — rows that contain a jqx checkbox
-        rate_rows = popup.locator("[role='row']").filter(
-            has=popup.locator(".jqx-checkbox-default")
-        )
+        # Collect selectable carrier rows — jqxGrid data rows carry a row-id attribute;
+        # expansion/detail rows (rendered by rowdetails) do not, so this naturally
+        # excludes them without needing a fragile filter(has=...) call.
+        rate_rows = popup.locator("[role='row'][row-id]")
         count = rate_rows.count()
         if count == 0:
             raise RuntimeError(
@@ -320,7 +320,7 @@ def create_order(playwright: Playwright, load_data: dict, config: dict) -> None:
                     raw = all_amounts[-1] if all_amounts else ""
 
                 amount = _parse_dollar(raw)
-                print(f"    [rates] row {i}: {raw!r} → {amount:.2f}")
+                print(f"    [rates] row {i}: {raw!r} -> {amount:.2f}")
 
                 if amount < best_amount:
                     best_amount = amount
